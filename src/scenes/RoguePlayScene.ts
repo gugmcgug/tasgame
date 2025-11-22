@@ -159,11 +159,15 @@ export class RoguePlayScene extends Scene {
       }
     }
 
-    // Reset stats
-    this.gameTime = 0
-    this.currentTime = 0
-    this.score = 0
-    this.killCount = 0
+    // Only reset stats when starting a new game (not preserving player)
+    if (!preservePlayer) {
+      this.gameTime = 0
+      this.score = 0
+      this.killCount = 0
+      this.currentFloor = 1
+      this.deepestFloor = 1
+    }
+    // NEVER reset currentTime - it's used for entity timing and must be continuous
   }
 
   update(deltaTime: number, input: InputManager): void {
