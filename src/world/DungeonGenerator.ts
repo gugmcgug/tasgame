@@ -9,10 +9,12 @@ interface Room {
 }
 
 export class DungeonGenerator {
-  static generate(width: number, height: number, tileSize: number = 32): {
+  static generate(width: number, height: number, tileSize: number = 32, floor: number = 1): {
     tilemap: Tilemap
     rooms: Room[]
     startPos: { x: number; y: number }
+    stairsDownPos: { x: number; y: number } | null
+    stairsUpPos: { x: number; y: number } | null
   } {
     const tilemap = new Tilemap(width, height, tileSize)
     const rooms: Room[] = []
@@ -64,7 +66,23 @@ export class DungeonGenerator {
       y: Math.floor(startRoom.y + startRoom.height / 2),
     }
 
-    return { tilemap, rooms, startPos }
+    // Place stairs up in first room (if not floor 1)
+    let stairsUpPos: { x: number; y: number } | null = null
+    if (floor > 1) {
+      const upX = startRoom.x + Math.floor(startRoom.width / 2) + 1
+      const upY = startRoom.y + Math.floor(startRoom.height / 2)
+      tilemap.setTile(upX, upY, Tile.createStairsUp())
+      stairsUpPos = { x: upX, y: upY }
+    }
+
+    // Place stairs down in last room
+    const lastRoom = rooms[rooms.length - 1]
+    const downX = Math.floor(lastRoom.x + lastRoom.width / 2)
+    const downY = Math.floor(lastRoom.y + lastRoom.height / 2)
+    tilemap.setTile(downX, downY, Tile.createStairsDown())
+    const stairsDownPos = { x: downX, y: downY }
+
+    return { tilemap, rooms, startPos, stairsDownPos, stairsUpPos }
   }
 
   private static roomsOverlap(room1: Room, room2: Room): boolean {

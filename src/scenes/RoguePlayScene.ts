@@ -17,6 +17,10 @@ export class RoguePlayScene extends Scene {
   private currentTime: number = 0
   private score: number = 0
   private killCount: number = 0
+  private currentFloor: number = 1
+  private stairsDownPos: { x: number; y: number } | null = null
+  private stairsUpPos: { x: number; y: number } | null = null
+  private deepestFloor: number = 1
 
   constructor(
     width: number,
@@ -37,35 +41,63 @@ export class RoguePlayScene extends Scene {
     console.log('⏹️  RoguePlayScene exited')
   }
 
-  private generateDungeon(): void {
+  private generateDungeon(preservePlayer: boolean = false): void {
     // Generate dungeon
     const mapWidth = 50
     const mapHeight = 40
     const tileSize = 32
 
-    const { tilemap, rooms, startPos } = DungeonGenerator.generate(mapWidth, mapHeight, tileSize)
+    const { tilemap, rooms, startPos, stairsDownPos, stairsUpPos } = DungeonGenerator.generate(
+      mapWidth,
+      mapHeight,
+      tileSize,
+      this.currentFloor
+    )
     this.tilemap = tilemap
+    this.stairsDownPos = stairsDownPos
+    this.stairsUpPos = stairsUpPos
 
-    // Create player
-    this.player = new RoguePlayer(startPos.x, startPos.y)
-    this.player.setTilePosition(startPos.x, startPos.y, tilemap)
+    // Create or reposition player
+    if (!preservePlayer || !this.player) {
+      this.player = new RoguePlayer(startPos.x, startPos.y)
+      this.player.setTilePosition(startPos.x, startPos.y, tilemap)
+    } else {
+      // Keep player stats, just change position
+      this.player.setTilePosition(startPos.x, startPos.y, tilemap)
+    }
 
     // Position camera on player
     const playerWorldPos = tilemap.tileToWorld(startPos.x, startPos.y)
     this.camera.setPosition(playerWorldPos.x, playerWorldPos.y)
 
     // Spawn enemies in random rooms (skip first room)
+    // Difficulty scaling: more enemies and tougher types on deeper floors
     this.enemies = []
+    const baseEnemies = 1 + Math.floor(Math.random() * 2)
+    const bonusEnemies = Math.floor(this.currentFloor / 3) // +1 enemy every 3 floors
+
     for (let i = 1; i < rooms.length; i++) {
       const room = rooms[i]
-      const numEnemies = 1 + Math.floor(Math.random() * 2)
+      const numEnemies = baseEnemies + bonusEnemies
 
       for (let j = 0; j < numEnemies; j++) {
         const enemyX = room.x + Math.floor(Math.random() * room.width)
         const enemyY = room.y + Math.floor(Math.random() * room.height)
 
-        const types: ('goblin' | 'orc' | 'skeleton')[] = ['goblin', 'orc', 'skeleton']
-        const type = types[Math.floor(Math.random() * types.length)]
+        // Higher chance of tougher enemies on deeper floors
+        const rand = Math.random()
+        let type: 'goblin' | 'orc' | 'skeleton'
+        if (this.currentFloor >= 5 && rand < 0.5) {
+          type = 'orc' // More orcs on floor 5+
+        } else if (this.currentFloor >= 3 && rand < 0.4) {
+          type = 'skeleton' // More skeletons on floor 3+
+        } else if (rand < 0.5) {
+          type = 'goblin'
+        } else if (rand < 0.75) {
+          type = 'skeleton'
+        } else {
+          type = 'orc'
+        }
 
         const enemy = new Enemy(enemyX, enemyY, type)
         enemy.setTilePosition(enemyX, enemyY, tilemap)
@@ -110,9 +142,11 @@ export class RoguePlayScene extends Scene {
     // Update player
     const playerMove = this.player.update(deltaTime, input, this.tilemap, this.currentTime)
 
-    // Check item collection
+    // Check item collection and stair interaction
     if (playerMove) {
       const playerPos = this.player.getTilePosition()
+
+      // Item collection
       for (const item of this.items) {
         if (!item.isCollected()) {
           const itemPos = item.getTilePosition()
@@ -120,6 +154,13 @@ export class RoguePlayScene extends Scene {
             this.collectItem(item)
           }
         }
+      }
+
+      // Check if standing on stairs
+      if (this.stairsDownPos && playerPos.x === this.stairsDownPos.x && playerPos.y === this.stairsDownPos.y) {
+        this.descend()
+      } else if (this.stairsUpPos && playerPos.x === this.stairsUpPos.x && playerPos.y === this.stairsUpPos.y) {
+        this.ascend()
       }
     }
 
@@ -199,6 +240,23 @@ export class RoguePlayScene extends Scene {
     }
   }
 
+  private descend(): void {
+    this.currentFloor++
+    if (this.currentFloor > this.deepestFloor) {
+      this.deepestFloor = this.currentFloor
+    }
+    console.log(`Descending to floor ${this.currentFloor}...`)
+    this.generateDungeon(true) // Preserve player health
+  }
+
+  private ascend(): void {
+    if (this.currentFloor > 1) {
+      this.currentFloor--
+      console.log(`Ascending to floor ${this.currentFloor}...`)
+      this.generateDungeon(true) // Preserve player health
+    }
+  }
+
   render(ctx: CanvasRenderingContext2D, _alpha: number): void {
     // Clear
     ctx.fillStyle = '#0a0a0a'
@@ -252,12 +310,22 @@ export class RoguePlayScene extends Scene {
     ctx.textAlign = 'left'
     ctx.fillText(`HP: ${health}/${maxHealth}`, 20, 50)
 
-    // Score
+    // Score and stats
     ctx.fillStyle = '#ffffff'
     ctx.font = '16px monospace'
     ctx.fillText(`Score: ${this.score}`, 10, 80)
     ctx.fillText(`Kills: ${this.killCount}`, 10, 100)
     ctx.fillText(`Enemies: ${this.enemies.length}`, 10, 120)
+
+    // Floor info
+    ctx.fillStyle = '#ffaa00'
+    ctx.font = 'bold 20px monospace'
+    ctx.fillText(`Floor: ${this.currentFloor}`, 10, 150)
+    if (this.deepestFloor > 1) {
+      ctx.fillStyle = '#ffffff'
+      ctx.font = '14px monospace'
+      ctx.fillText(`(Deepest: ${this.deepestFloor})`, 10, 170)
+    }
 
     // Instructions
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
