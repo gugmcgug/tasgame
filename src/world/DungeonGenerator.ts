@@ -1,11 +1,15 @@
 import { Tilemap } from './Tilemap'
-import { Tile } from './Tile'
+import { Tile, TileType } from './Tile'
+import { templateManager, getFloorRules } from './templates'
+import type { EntitySpawn, RoomTemplate } from './templates'
 
 interface Room {
   x: number
   y: number
   width: number
   height: number
+  isTemplate?: boolean
+  template?: RoomTemplate
 }
 
 export class DungeonGenerator {
@@ -15,6 +19,7 @@ export class DungeonGenerator {
     startPos: { x: number; y: number }
     stairsDownPos: { x: number; y: number } | null
     stairsUpPos: { x: number; y: number } | null
+    templateSpawns: EntitySpawn[]
   } {
     const tilemap = new Tilemap(width, height, tileSize)
     const rooms: Room[] = []
@@ -59,6 +64,13 @@ export class DungeonGenerator {
     // Create walls around floors
     this.createWalls(tilemap)
 
+    // Get floor rules and select templates
+    const rules = getFloorRules(floor)
+    const templateSpawns: EntitySpawn[] = []
+
+    // Replace rooms with templates based on floor rules
+    this.placeTemplateRooms(tilemap, rooms, floor, rules, templateSpawns)
+
     // Get starting position (center of first room)
     const startRoom = rooms[0]
     const startPos = {
@@ -82,7 +94,105 @@ export class DungeonGenerator {
     tilemap.setTile(downX, downY, Tile.createStairsDown())
     const stairsDownPos = { x: downX, y: downY }
 
-    return { tilemap, rooms, startPos, stairsDownPos, stairsUpPos }
+    return { tilemap, rooms, startPos, stairsDownPos, stairsUpPos, templateSpawns }
+  }
+
+  private static placeTemplateRooms(
+    tilemap: Tilemap,
+    rooms: Room[],
+    floor: number,
+    rules: ReturnType<typeof getFloorRules>,
+    templateSpawns: EntitySpawn[]
+  ): void {
+    let templatesPlaced = 0
+    const maxTemplates = rules.maxTemplateRooms || 1
+
+    // Try to place boss room (last room if boss floor)
+    if (rules.bossRoom && rooms.length > 2) {
+      const bossTemplates = templateManager.getTemplatesForFloor(floor, 'boss')
+      const bossTemplate = templateManager.selectRandomTemplate(bossTemplates)
+
+      if (bossTemplate) {
+        const targetRoom = rooms[rooms.length - 1]
+        this.placeTemplate(tilemap, bossTemplate, targetRoom, templateSpawns)
+        targetRoom.isTemplate = true
+        targetRoom.template = bossTemplate
+        templatesPlaced++
+      }
+    }
+
+    // Try to place treasure rooms
+    if (templatesPlaced < maxTemplates && rules.treasureChance && Math.random() < rules.treasureChance) {
+      const treasureTemplates = templateManager.getTemplatesForFloor(floor, 'rare')
+      const treasureTemplate = templateManager.selectRandomTemplate(treasureTemplates)
+
+      if (treasureTemplate) {
+        // Place in a middle room (not first or last)
+        const middleIndex = Math.floor(rooms.length / 2) + Math.floor(Math.random() * 2) - 1
+        if (middleIndex > 0 && middleIndex < rooms.length && !rooms[middleIndex].isTemplate) {
+          const targetRoom = rooms[middleIndex]
+          this.placeTemplate(tilemap, treasureTemplate, targetRoom, templateSpawns)
+          targetRoom.isTemplate = true
+          targetRoom.template = treasureTemplate
+          templatesPlaced++
+        }
+      }
+    }
+  }
+
+  private static placeTemplate(
+    tilemap: Tilemap,
+    template: RoomTemplate,
+    room: Room,
+    spawns: EntitySpawn[]
+  ): void {
+    // Calculate offset to center template in room
+    const offsetX = Math.floor(room.x + (room.width - template.width) / 2)
+    const offsetY = Math.floor(room.y + (room.height - template.height) / 2)
+
+    // Place template tiles
+    for (let y = 0; y < template.height; y++) {
+      for (let x = 0; x < template.width; x++) {
+        const tileType = template.tiles[y][x]
+        const worldX = offsetX + x
+        const worldY = offsetY + y
+
+        // Only place if within bounds
+        if (worldX >= 0 && worldX < tilemap.width && worldY >= 0 && worldY < tilemap.height) {
+          tilemap.setTile(worldX, worldY, this.createTileFromType(tileType))
+        }
+      }
+    }
+
+    // Add spawns with world positions
+    for (const spawn of template.spawns) {
+      spawns.push({
+        ...spawn,
+        position: {
+          x: offsetX + spawn.position.x,
+          y: offsetY + spawn.position.y,
+        },
+      })
+    }
+  }
+
+  private static createTileFromType(type: TileType): Tile {
+    switch (type) {
+      case TileType.Floor:
+        return Tile.createFloor()
+      case TileType.Wall:
+        return Tile.createWall()
+      case TileType.Door:
+        return Tile.createDoor()
+      case TileType.Empty:
+        return Tile.createEmpty()
+      case TileType.StairsDown:
+        return Tile.createStairsDown()
+      case TileType.StairsUp:
+        return Tile.createStairsUp()
+      default:
+        return Tile.createEmpty()
+    }
   }
 
   private static roomsOverlap(room1: Room, room2: Room): boolean {

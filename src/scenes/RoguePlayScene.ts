@@ -5,12 +5,17 @@ import { DungeonGenerator } from '../world/DungeonGenerator'
 import { Tilemap } from '../world/Tilemap'
 import { RoguePlayer } from '../entities/RoguePlayer'
 import { Enemy } from '../entities/Enemy'
+import { Boss } from '../entities/Boss'
 import { Item, ItemType } from '../entities/Item'
+import { initializeTemplates } from '../world/templates'
+
+// Initialize templates once
+let templatesInitialized = false
 
 export class RoguePlayScene extends Scene {
   private tilemap!: Tilemap
   private player!: RoguePlayer
-  private enemies: Enemy[] = []
+  private enemies: (Enemy | Boss)[] = []
   private items: Item[] = []
   private camera!: Camera
   private gameTime: number = 0
@@ -34,6 +39,13 @@ export class RoguePlayScene extends Scene {
 
   onEnter(): void {
     console.log('▶️  RoguePlayScene entered')
+
+    // Initialize templates on first load
+    if (!templatesInitialized) {
+      initializeTemplates()
+      templatesInitialized = true
+    }
+
     this.generateDungeon()
   }
 
@@ -47,7 +59,7 @@ export class RoguePlayScene extends Scene {
     const mapHeight = 40
     const tileSize = 32
 
-    const { tilemap, rooms, startPos, stairsDownPos, stairsUpPos } = DungeonGenerator.generate(
+    const { tilemap, rooms, startPos, stairsDownPos, stairsUpPos, templateSpawns } = DungeonGenerator.generate(
       mapWidth,
       mapHeight,
       tileSize,
@@ -117,6 +129,33 @@ export class RoguePlayScene extends Scene {
         const item = new Item(itemX, itemY, itemType)
         item.setWorldPosition(tilemap)
         this.items.push(item)
+      }
+    }
+
+    // Spawn entities from templates
+    for (const spawn of templateSpawns) {
+      switch (spawn.type) {
+        case 'boss':
+          const boss = new Boss(spawn.position.x, spawn.position.y, this.currentFloor)
+          boss.setTilePosition(spawn.position.x, spawn.position.y, tilemap)
+          this.enemies.push(boss)
+          break
+
+        case 'enemy':
+          if (spawn.enemyType && spawn.enemyType !== 'boss') {
+            const enemy = new Enemy(spawn.position.x, spawn.position.y, spawn.enemyType)
+            enemy.setTilePosition(spawn.position.x, spawn.position.y, tilemap)
+            this.enemies.push(enemy)
+          }
+          break
+
+        case 'item':
+          if (spawn.itemType) {
+            const item = new Item(spawn.position.x, spawn.position.y, spawn.itemType)
+            item.setWorldPosition(tilemap)
+            this.items.push(item)
+          }
+          break
       }
     }
 

@@ -40,7 +40,7 @@ export class Enemy extends Entity {
     player: RoguePlayer,
     tilemap: Tilemap,
     currentTime: number,
-    enemies: Enemy[]
+    enemies: (Enemy | import('./Boss').Boss)[]
   ): { action: 'move' | 'attack' | 'idle'; target?: RoguePlayer } | null {
     // Check if enough time has passed since last move
     if (currentTime - this.lastMoveTime < this.moveDelay) {
@@ -79,7 +79,7 @@ export class Enemy extends Entity {
     dx: number,
     dy: number,
     tilemap: Tilemap,
-    enemies: Enemy[],
+    enemies: (Enemy | import('./Boss').Boss)[],
     currentTime: number
   ): { action: 'move' | 'idle' } {
     // Try to move in preferred direction
@@ -105,7 +105,7 @@ export class Enemy extends Entity {
     return { action: 'idle' }
   }
 
-  private canMove(dx: number, dy: number, tilemap: Tilemap, enemies: Enemy[]): boolean {
+  private canMove(dx: number, dy: number, tilemap: Tilemap, enemies: (Enemy | import('./Boss').Boss)[]): boolean {
     const newX = this.tileX + dx
     const newY = this.tileY + dy
 
