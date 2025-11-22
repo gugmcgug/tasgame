@@ -117,15 +117,42 @@ export class RoguePlayScene extends Scene {
       }
     }
 
-    // Spawn items in random rooms
+    // Spawn items in random rooms with varied types
     this.items = []
     for (let i = 1; i < rooms.length; i++) {
-      if (Math.random() < 0.6) {
+      if (Math.random() < 0.7) { // 70% chance for items
         const room = rooms[i]
         const itemX = room.x + Math.floor(Math.random() * room.width)
         const itemY = room.y + Math.floor(Math.random() * room.height)
 
-        const itemType: ItemType = Math.random() < 0.7 ? 'health_potion' : 'gold'
+        // Choose item type based on rarity
+        const rand = Math.random()
+        let itemType: ItemType
+
+        if (rand < 0.35) {
+          // Common items (35%)
+          itemType = 'health_potion'
+        } else if (rand < 0.55) {
+          // Gold (20%)
+          itemType = 'gold'
+        } else if (rand < 0.70) {
+          // Common equipment (15%)
+          const commonEquip: ItemType[] = ['leather_armor', 'dagger', 'mana_potion']
+          itemType = commonEquip[Math.floor(Math.random() * commonEquip.length)]
+        } else if (rand < 0.85) {
+          // Uncommon equipment (15%)
+          const uncommonEquip: ItemType[] = ['sword', 'chain_mail', 'key']
+          itemType = uncommonEquip[Math.floor(Math.random() * uncommonEquip.length)]
+        } else if (rand < 0.95) {
+          // Rare equipment (10%)
+          const rareEquip: ItemType[] = ['axe', 'plate_armor', 'scroll_fireball']
+          itemType = rareEquip[Math.floor(Math.random() * rareEquip.length)]
+        } else {
+          // Epic items (5%)
+          const epicItems: ItemType[] = ['ring_regeneration', 'amulet_protection', 'scroll_teleport']
+          itemType = epicItems[Math.floor(Math.random() * epicItems.length)]
+        }
+
         const item = new Item(itemX, itemY, itemType)
         item.setWorldPosition(tilemap)
         this.items.push(item)
@@ -183,11 +210,16 @@ export class RoguePlayScene extends Scene {
     }
 
     // Update player
-    const playerMove = this.player.update(deltaTime, input, this.tilemap, this.currentTime)
+    const playerMove = this.player.update(deltaTime, input, this.tilemap, this.currentTime, this.enemies)
 
-    // Check item collection and stair interaction
+    // Check item collection, attacks, and stair interaction
     if (playerMove) {
       const playerPos = this.player.getTilePosition()
+
+      // Handle attack if player moved into an enemy
+      if (playerMove.attacked) {
+        this.playerAttackDirection(playerMove.dx, playerMove.dy)
+      }
 
       // Item collection
       for (const item of this.items) {
@@ -239,24 +271,103 @@ export class RoguePlayScene extends Scene {
 
   private collectItem(item: Item): void {
     item.collect()
-    const type = item.getType()
+    const effect = item.getEffect()
+    const name = item.getName()
 
-    switch (type) {
-      case 'health_potion':
-        this.player.getStats().heal(30)
-        console.log('Collected health potion! +30 HP')
+    switch (effect.type) {
+      case 'heal':
+        this.player.getStats().heal(effect.value)
+        console.log(`✨ Collected ${name}! +${effect.value} HP`)
         break
-      case 'gold':
-        this.score += 50
-        console.log('Collected gold! +50 score')
+
+      case 'score':
+        this.score += effect.value
+        if (effect.value > 0) {
+          console.log(`✨ Collected ${name}! +${effect.value} score`)
+        } else {
+          console.log(`✨ Collected ${name}!`)
+        }
         break
+
+      case 'equipment':
+        if (effect.stat) {
+          const stats = this.player.getStats()
+          switch (effect.stat) {
+            case 'attack':
+              stats.attack += effect.value
+              console.log(`⚔️  Equipped ${name}! ATK +${effect.value} (Total: ${stats.attack})`)
+              break
+            case 'defense':
+              stats.defense += effect.value
+              console.log(`🛡️  Equipped ${name}! DEF +${effect.value} (Total: ${stats.defense})`)
+              break
+            case 'maxHealth':
+              stats.maxHealth += effect.value
+              stats.health += effect.value // Also increase current health
+              console.log(`❤️  Equipped ${name}! Max HP +${effect.value} (Total: ${stats.maxHealth})`)
+              break
+          }
+        }
+        break
+
+      case 'damage':
+        // Damage all nearby enemies (for scrolls like fireball)
+        let damaged = 0
+        const playerPos = this.player.getTilePosition()
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+          const enemy = this.enemies[i]
+          const enemyPos = enemy.getTilePosition()
+          const distance = Math.abs(enemyPos.x - playerPos.x) + Math.abs(enemyPos.y - playerPos.y)
+
+          if (distance <= 3) { // 3 tile radius
+            enemy.getStats().takeDamage(effect.value)
+            damaged++
+            if (enemy.getStats().isDead()) {
+              this.enemies.splice(i, 1)
+              this.killCount++
+            }
+          }
+        }
+        console.log(`🔥 Used ${name}! Damaged ${damaged} enemies for ${effect.value} each!`)
+        break
+
+      case 'mana':
+        // For future mana system
+        this.score += 10
+        console.log(`✨ Collected ${name}! (No mana system yet, +10 score)`)
+        break
+    }
+  }
+
+  private playerAttackDirection(dx: number, dy: number): void {
+    const playerPos = this.player.getTilePosition()
+    const targetX = playerPos.x + dx
+    const targetY = playerPos.y + dy
+
+    // Find enemy at target position
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i]
+      const enemyPos = enemy.getTilePosition()
+
+      if (enemyPos.x === targetX && enemyPos.y === targetY) {
+        const damage = this.player.attack(enemy)
+        console.log(`Player attacks ${enemy instanceof Boss ? 'BOSS' : 'enemy'} for ${damage} damage! (${enemy.getStats().health}/${enemy.getStats().maxHealth} HP remaining)`)
+
+        if (enemy.getStats().isDead()) {
+          this.enemies.splice(i, 1)
+          this.killCount++
+          console.log(`${enemy instanceof Boss ? 'BOSS' : 'Enemy'} defeated! +${enemy instanceof Boss ? 100 : 10} score`)
+          this.score += enemy instanceof Boss ? 100 : 10
+        }
+        break
+      }
     }
   }
 
   private playerAttack(): void {
     const playerPos = this.player.getTilePosition()
 
-    // Find adjacent enemies
+    // Find all adjacent enemies and attack them
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i]
       const enemyPos = enemy.getTilePosition()
@@ -266,12 +377,13 @@ export class RoguePlayScene extends Scene {
 
       if (dx <= 1 && dy <= 1 && (dx + dy) > 0) {
         const damage = this.player.attack(enemy)
-        console.log(`Player attacks enemy for ${damage} damage!`)
+        console.log(`Player attacks ${enemy instanceof Boss ? 'BOSS' : 'enemy'} for ${damage} damage! (${enemy.getStats().health}/${enemy.getStats().maxHealth} HP remaining)`)
 
         if (enemy.getStats().isDead()) {
           this.enemies.splice(i, 1)
           this.killCount++
-          console.log('Enemy defeated!')
+          console.log(`${enemy instanceof Boss ? 'BOSS' : 'Enemy'} defeated! +${enemy instanceof Boss ? 100 : 10} score`)
+          this.score += enemy instanceof Boss ? 100 : 10
         }
       }
     }
@@ -353,27 +465,33 @@ export class RoguePlayScene extends Scene {
     ctx.textAlign = 'left'
     ctx.fillText(`HP: ${health}/${maxHealth}`, 20, 50)
 
+    // Player stats
+    const stats = this.player.getStats()
+    ctx.fillStyle = '#ffaa00'
+    ctx.font = '14px monospace'
+    ctx.fillText(`⚔️  ATK: ${stats.attack}  🛡️  DEF: ${stats.defense}`, 20, 70)
+
     // Score and stats
     ctx.fillStyle = '#ffffff'
     ctx.font = '16px monospace'
-    ctx.fillText(`Score: ${this.score}`, 10, 80)
-    ctx.fillText(`Kills: ${this.killCount}`, 10, 100)
-    ctx.fillText(`Enemies: ${this.enemies.length}`, 10, 120)
+    ctx.fillText(`Score: ${this.score}`, 10, 100)
+    ctx.fillText(`Kills: ${this.killCount}`, 10, 120)
+    ctx.fillText(`Enemies: ${this.enemies.length}`, 10, 140)
 
     // Floor info
     ctx.fillStyle = '#ffaa00'
     ctx.font = 'bold 20px monospace'
-    ctx.fillText(`Floor: ${this.currentFloor}`, 10, 150)
+    ctx.fillText(`Floor: ${this.currentFloor}`, 10, 170)
     if (this.deepestFloor > 1) {
       ctx.fillStyle = '#ffffff'
       ctx.font = '14px monospace'
-      ctx.fillText(`(Deepest: ${this.deepestFloor})`, 10, 170)
+      ctx.fillText(`(Deepest: ${this.deepestFloor})`, 10, 190)
     }
 
     // Instructions
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
     ctx.font = '14px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText('WASD: Move | SPACE: Attack | ESC: Pause', this.width / 2, this.height - 20)
+    ctx.fillText('WASD: Move/Attack | SPACE: Multi-Attack | ESC: Pause', this.width / 2, this.height - 20)
   }
 }
