@@ -85,6 +85,28 @@ export class Tilemap {
             ctx.fillStyle = '#0a0a0a'
             ctx.fillRect(drawX, drawY, this.tileSize, this.tileSize)
             break
+          case TileType.StairsDown:
+            // Floor background
+            ctx.fillStyle = '#2a2a3e'
+            ctx.fillRect(drawX, drawY, this.tileSize, this.tileSize)
+            // Stairs icon (down arrow)
+            ctx.fillStyle = '#ffaa00'
+            ctx.font = 'bold 24px monospace'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText('▼', drawX + this.tileSize / 2, drawY + this.tileSize / 2)
+            break
+          case TileType.StairsUp:
+            // Floor background
+            ctx.fillStyle = '#2a2a3e'
+            ctx.fillRect(drawX, drawY, this.tileSize, this.tileSize)
+            // Stairs icon (up arrow)
+            ctx.fillStyle = '#00aaff'
+            ctx.font = 'bold 24px monospace'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText('▲', drawX + this.tileSize / 2, drawY + this.tileSize / 2)
+            break
         }
       }
     }

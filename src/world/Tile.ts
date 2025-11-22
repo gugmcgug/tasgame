@@ -3,6 +3,8 @@ export enum TileType {
   Floor = 1,
   Wall = 2,
   Door = 3,
+  StairsDown = 4,
+  StairsUp = 5,
 }
 
 export class Tile {
@@ -26,5 +28,13 @@ export class Tile {
 
   static createDoor(): Tile {
     return new Tile(TileType.Door, true, true)
+  }
+
+  static createStairsDown(): Tile {
+    return new Tile(TileType.StairsDown, true, true)
+  }
+
+  static createStairsUp(): Tile {
+    return new Tile(TileType.StairsUp, true, true)
   }
 }
