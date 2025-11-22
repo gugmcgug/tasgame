@@ -1,7 +1,7 @@
 import { InputManager } from './InputManager'
 import { GameState } from './GameState'
 import { MenuScene } from '../scenes/MenuScene'
-import { PlayScene } from '../scenes/PlayScene'
+import { RoguePlayScene } from '../scenes/RoguePlayScene'
 import { PauseScene } from '../scenes/PauseScene'
 import { GameOverScene } from '../scenes/GameOverScene'
 
@@ -137,7 +137,7 @@ export class Game {
 
   private startGame(): void {
     this.state.clearScenes()
-    const playScene = new PlayScene(
+    const playScene = new RoguePlayScene(
       this.canvas.width,
       this.canvas.height,
       () => this.pauseGame(),
