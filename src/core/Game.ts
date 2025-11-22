@@ -1,6 +1,9 @@
 import { InputManager } from './InputManager'
 import { GameState } from './GameState'
+import { MenuScene } from '../scenes/MenuScene'
 import { PlayScene } from '../scenes/PlayScene'
+import { PauseScene } from '../scenes/PauseScene'
+import { GameOverScene } from '../scenes/GameOverScene'
 
 export class Game {
   private canvas: HTMLCanvasElement
@@ -24,8 +27,8 @@ export class Game {
     this.inputManager = new InputManager()
     this.state = new GameState()
 
-    // Initialize with PlayScene
-    this.state.pushScene(new PlayScene(this.canvas.width, this.canvas.height))
+    // Initialize with MenuScene
+    this.showMenu()
   }
 
   start(): void {
@@ -119,5 +122,57 @@ export class Game {
 
   getState(): GameState {
     return this.state
+  }
+
+  // Scene management methods
+  private showMenu(): void {
+    this.state.clearScenes()
+    const menuScene = new MenuScene(
+      this.canvas.width,
+      this.canvas.height,
+      () => this.startGame()
+    )
+    this.state.pushScene(menuScene)
+  }
+
+  private startGame(): void {
+    this.state.clearScenes()
+    const playScene = new PlayScene(
+      this.canvas.width,
+      this.canvas.height,
+      () => this.pauseGame(),
+      (score: number) => this.gameOver(score)
+    )
+    this.state.pushScene(playScene)
+  }
+
+  private pauseGame(): void {
+    const pauseScene = new PauseScene(
+      this.canvas.width,
+      this.canvas.height,
+      () => this.resumeGame(),
+      () => this.returnToMenu()
+    )
+    this.state.pushScene(pauseScene)
+  }
+
+  private resumeGame(): void {
+    this.state.popScene()
+  }
+
+  private gameOver(score: number): void {
+    this.state.clearScenes()
+    const gameOverScene = new GameOverScene(
+      this.canvas.width,
+      this.canvas.height,
+      score,
+      () => this.startGame(),
+      () => this.returnToMenu()
+    )
+    this.state.pushScene(gameOverScene)
+  }
+
+  private returnToMenu(): void {
+    this.showMenu()
   }
 }
